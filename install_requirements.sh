@@ -1,0 +1,1 @@
+sudo pip install tensorflow==2.5.0rc3 mediapipe==0.8.4.2 numpy==1.19.5 opencv-python==4.5.2.52
