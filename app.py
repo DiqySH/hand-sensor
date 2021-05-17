@@ -55,7 +55,7 @@ def server_handling():
         while(True):
             try:
                 # Construct the payload and send it. Wait a tick length before sending the next packet
-                payload = f"X{palm_coordinates[0]}Y{palm_coordinates[1]}H{hands_detected}O{1 if hand_open else 0}\n"
+                payload = f"X{palm_coordinates[0]},Y{palm_coordinates[1]},H{hands_detected},O{1 if hand_open else 0}\n"
                 client.send(payload.encode())
                 time.sleep(1 / TCP_TICKRATE)
             except:
