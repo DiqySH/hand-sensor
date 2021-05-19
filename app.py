@@ -1,4 +1,4 @@
-from utils import get_average_knuckle_distance, map_range
+from utils import get_average_knuckle_distance, get_root_distance, map_range
 from detect import detect_hands
 
 import cv2
@@ -9,10 +9,13 @@ import sys
 import time
 
 # Change set this higher if a closed hand gets detected as open
-MIN_HAND_OPEN_DISTANCE = 0.045
+MIN_HAND_OPEN_DISTANCE = 0.015
+
+# Protection value for when the AI detects 1 hand as 2:
+MULTI_HAND_PROTECTION = 0.15
 
 # TCP server settings
-TCP_IP = '192.168.1.68'
+TCP_IP = 'localhost'
 TCP_PORT = 2314
 TCP_TICKRATE = 30
 BUFFER_SIZE = 8192
@@ -86,8 +89,10 @@ while cap.isOpened():
         continue
 
     # Flip the image horizontally for a later selfie-view display
-    image = cv2.flip(image, 1)
-    # image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    # image = cv2.flip(image, 1)
+
+    # Rotate the image clockwise
+    # image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
     # Process this frame with the model
     success, multi_hand_landmarks, image = detect_hands(
@@ -96,12 +101,12 @@ while cap.isOpened():
     # Draw the detection region
     detection_region = np.zeros(image.shape, np.uint8)
     cv2.rectangle(detection_region, start_point,
-                  end_point, (0, 255, 255), cv2.FILLED)
+                  end_point, (0, 0, 255), cv2.FILLED)
     image = cv2.addWeighted(image, 1, detection_region, 0.25, 1)
 
     # Draw the hand annotations on the image
     if success and multi_hand_landmarks:
-        if len(multi_hand_landmarks) > 1:
+        if len(multi_hand_landmarks) > 1 and get_root_distance(multi_hand_landmarks[0].landmark[0], multi_hand_landmarks[1].landmark[0]) > MULTI_HAND_PROTECTION:
             # If we've detected more than 1 hand, update the multiple hands status and draw an alert on screen
             cv2.putText(image, "Multiple hands detected! " + str(len(multi_hand_landmarks)), (20, 50),
                         cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)

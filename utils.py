@@ -12,6 +12,10 @@ def get_average_knuckle_distance(points):
     return total_distance / 16
 
 
+def get_root_distance(root1, root2):
+    return distance_between(root1.x, root1.y, root2.x, root2.y)
+
+
 def distance_between(x1, y1, x2, y2):
     # Return the distance between 2 points
     return sqrt((x2 - x1)**2 + (y2 - y1)**2)
