@@ -1,4 +1,4 @@
-from utils import get_average_knuckle_distance, get_root_distance, map_range
+from utils import get_average_knuckle_distance, get_root_distance, get_palm_coordinate, map_range
 from detect import detect_hands
 
 import cv2
@@ -9,7 +9,7 @@ import sys
 import time
 
 # Change set this higher if a closed hand gets detected as open
-MIN_HAND_OPEN_DISTANCE = 0.015
+MIN_HAND_OPEN_DISTANCE = 0.078
 
 # Protection value for when the AI detects 1 hand as 2:
 MULTI_HAND_PROTECTION = 0.15
@@ -20,13 +20,19 @@ TCP_PORT = 2314
 TCP_TICKRATE = 30
 BUFFER_SIZE = 8192
 
+# Inner detection margins
+MARGIN_HORIZONTAL = 70
+MARGIN_VERTICAL = 70
+
 # For the coordinate mapper
 MAPPED_WIDTH = 600
 MAPPED_HEIGHT = 400
 
 mouse_is_down = False
 start_point = (0, 0)
+margined_start_point = (0, 0)
 end_point = (0, 0)
+margined_end_point = (0, 0)
 
 # Statuses to send to the client
 hands_detected = 0
@@ -38,7 +44,7 @@ send_payload = False
 
 
 def mouse_event(event, x, y, flags, param):
-    global start_point, end_point, mouse_is_down
+    global start_point, end_point, mouse_is_down, margined_start_point, margined_end_point
     if event == cv2.EVENT_LBUTTONDOWN:
         start_point = (x, y)
         end_point = (x, y)
@@ -47,6 +53,14 @@ def mouse_event(event, x, y, flags, param):
         end_point = (x, y)
     elif event == cv2.EVENT_LBUTTONUP:
         mouse_is_down = False
+        if start_point[0] > end_point[0] or start_point[1] > end_point[1]:
+            start_point, end_point = end_point, start_point
+        if end_point[0] - start_point[0] > MARGIN_HORIZONTAL and end_point[1] - start_point[1] > MARGIN_VERTICAL:
+            margined_start_point = (start_point[0] + MARGIN_HORIZONTAL, start_point[1] + MARGIN_VERTICAL)
+            margined_end_point = (end_point[0] - MARGIN_HORIZONTAL, end_point[1] - MARGIN_VERTICAL)
+        else:
+            margined_start_point = start_point
+            margined_end_point = end_point
 
 
 def server_handling():
@@ -70,7 +84,7 @@ def server_handling():
 
 
 # Set up webcam capturing and mouse events
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cv2.namedWindow("Hand detection")
 cv2.setMouseCallback("Hand detection", mouse_event)
 
@@ -89,7 +103,7 @@ while cap.isOpened():
         continue
 
     # Flip the image horizontally for a later selfie-view display
-    # image = cv2.flip(image, 1)
+    image = cv2.flip(image, 1)
 
     # Rotate the image clockwise
     # image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
@@ -102,7 +116,13 @@ while cap.isOpened():
     detection_region = np.zeros(image.shape, np.uint8)
     cv2.rectangle(detection_region, start_point,
                   end_point, (0, 0, 255), cv2.FILLED)
-    image = cv2.addWeighted(image, 1, detection_region, 0.25, 1)
+    image = cv2.addWeighted(image, 1, detection_region, 0.10, 1)
+    if not mouse_is_down:
+        margin_region = np.zeros(image.shape, np.uint8)
+        cv2.rectangle(margin_region, margined_start_point,
+            margined_end_point, (0, 255, 255), cv2.FILLED)
+        image = cv2.addWeighted(image, 1, margin_region, 0.20, 1)
+
 
     # Draw the hand annotations on the image
     if success and multi_hand_landmarks:
@@ -120,18 +140,17 @@ while cap.isOpened():
                 hand_open = True
             else:
                 hand_open = False
+            palm_coordinates_unmapped = get_palm_coordinate(landmarks)
             cv2.putText(image,
                         "Hand open" if hand_open else "Hand closed", (20, 70), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
             # Get the coordinates of the palm
-            draw_palm_x = (int)(landmarks[0].x * image.shape[1])
-            draw_palm_y = (int)(landmarks[0].y * image.shape[0])
-            draw_palm_coordinates = (draw_palm_x, draw_palm_y)
+            draw_palm_coordinates = (int(palm_coordinates_unmapped[0] * image.shape[1]), int(palm_coordinates_unmapped[1] * image.shape[0]))
 
             mapped_palm_x = (int)(map_range(
-                landmarks[0].x, start_point[0] / image.shape[1], end_point[0] / image.shape[1], 0, MAPPED_WIDTH))
+                palm_coordinates_unmapped[0], margined_start_point[0] / image.shape[1], margined_end_point[0] / image.shape[1], 0, MAPPED_WIDTH))
             mapped_palm_y = (int)(map_range(
-                landmarks[0].y, start_point[1] / image.shape[0], end_point[1] / image.shape[0], 0, MAPPED_HEIGHT))
+                palm_coordinates_unmapped[1], margined_start_point[1] / image.shape[0], margined_end_point[1] / image.shape[0], 0, MAPPED_HEIGHT))
             palm_coordinates = (mapped_palm_x, mapped_palm_y)
 
             # Draw a purple circle at the palm
